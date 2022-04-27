@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+# print doc/usage
+if (( $# < 1 )) ; then
+    echo "screen_handle: run a command in a detached screen session and terminate it when receiving ctrl-c"
+    echo ""
+    echo "usage: $0 CMD [ARG [ARG..]]"
+    exit 1
+fi
+
+# construct logfile name from given command
+NAME=$(basename ${1})
+LOG_DIR=/tmp/screen_handle
+mkdir -p $LOG_DIR
+
+# latest log is always named for
+LOG_NAME="${LOG_DIR}/${NAME}.log"
+
+# archive previous logs
+if [[ -e $LOG_NAME ]] ; then
+    LOG_ARCHIVE_NAME="${LOG_NAME}.$(ls -1q ${LOG_NAME}* | wc -l)"
+    mv $LOG_NAME $LOG_ARCHIVE_NAME
+fi
+
+# run the command in a screen session
+screen -L -Logfile $LOG_NAME -S $NAME -D -m $@ &
+
+# get the screen session name from the pid
+PID="$!"
+SESSION="$PID.$NAME"
+echo "screen session $SESSION running: '$@'"
+echo "logging to: $LOG_NAME"
+
+# wait for Ctrl-C
+( trap exit SIGINT ; read -r -d '' _ </dev/tty )
+
+# forward Ctrl-C
+echo "sending ctrl-c to screen session $SESSION..."
+screen -S $SESSION -X stuff '^C'
+
+# dump the log for convenience
+cat $LOG_NAME
